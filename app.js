@@ -6,6 +6,8 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const findOrCreate = require("mongoose-findorcreate");
 
 const app = express();
 
@@ -32,10 +34,12 @@ mongoose.set("useCreateIndex", true);
 
 const userSchema = new mongoose.Schema({
     email: String,
-    password: String
+    password: String,
+    googleId: String
 });
 
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate);
 
 const User = mongoose.model("User", userSchema);
 
@@ -48,6 +52,18 @@ passport.deserializeUser(function(User, done) {
     done(null, User);
 });
 
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+},
+function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    return cb(err, user);
+    });
+}
+));
+
 app.get("/", function(req, res){
     res.render("home");
 });
@@ -58,6 +74,16 @@ app.get("/register", function(req, res){
 
 app.get("/login", function(req, res){
     res.render("login");
+});
+
+app.get("/auth/google",
+    passport.authenticate("google", { scope: ["profile"] })
+);
+
+app.get("/auth/google/secrets", 
+passport.authenticate("google", { failureRedirect: "/login" }),
+function(req, res) {
+    res.redirect("/secrets");
 });
 
 app.get("/logout", function(req, res){
